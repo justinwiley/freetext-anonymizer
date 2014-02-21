@@ -1,6 +1,6 @@
 # Freetext::Anonymizer
 
-TODO: Write a gem description
+Work in progess, not ready for prime-time.
 
 ## Installation
 

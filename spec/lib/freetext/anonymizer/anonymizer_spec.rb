@@ -70,8 +70,9 @@ describe Freetext do
     end
 
     context '#anonymize' do
-      it 'should anonymize'
-
+      it 'should anonymize a given string removing known bad words and leaving known good' do
+        anon.anonymize(text).should == ""
+      end
     end
 
     it '#dump should marshal and return a trained classifier for later use' do
