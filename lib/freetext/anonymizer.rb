@@ -1,16 +1,69 @@
+require 'classifier'
 require "freetext/anonymizer/version"
 
 module Freetext
-  class Classifier
-    attr_accessor :good, :bad
+  class Analyzer  # this should really be called Classifer, but collides with Classifier::Bayes
+    attr_accessor :good, :bad, :classifier
     def initialize opts
-      raise ArgumentError.new("Must pass in a list of good words, that should not be anonymized/removed") unless opts[:good]
-      raise ArgumentError.new("Must pass in a list of bad words, that should be anonymized/removed") unless opts[:bad]
       self.good, self.bad = opts[:good], opts[:bad]
+      self.classifier = Classifier::Bayes.new 'good', 'bad'
+    end
+
+    def train type
+      self.send(type).map{|word| classifier.send "train_#{type}", word }
+    end
+
+    def train!
+      ['good', 'bad'].map{|t| train(t)}
+    end
+
+    def trained?
+      @trained ||= classifier.instance_variable_get(:@category_counts).any?
+    end
+
+    def stats
+      instance_variable_get(:@category_counts)
+    end
+
+    def analyze word
+      train! unless trained?
+      classifier.classify word
     end
   end
 
   class Anonymizer
+    attr_accessor :analyzer
+
+    def initialize opts={}
+      raise ArgumentError.new(%Q{You must initialize with either a list of known good words and known bad words to anonymize,
+        or an existing Freetext::Analyzer.  Example:
+        Freetext::Analyzer.new({good: ['mars'], bad: ['marsha']})
+        ...or
+        Freetext::Analyzer.new({analyzer: Freetext::Analyzer.new})}) unless opts[:bad] || opts[:analyzer]
+
+      self.analyzer = set_analyzer opts
+    end
+
+    def set_analyzer opts
+      # binding.pry
+      analyzer = opts.delete(:analyzer)
+
+      if analyzer.is_a?(String)
+        load(analyzer)
+      elsif analyzer.is_a?(Analyzer)
+        analyzer
+      else
+        Analyzer.new(opts)
+      end
+    end
+
+    def dump
+      Marshal.dump(analyzer)
+    end
+
+    def load analyzer_string
+      Marshal.load(analyzer_string)
+    end
 
     def readfile(file); File.open(file){|f| f.read }.split; end;
 

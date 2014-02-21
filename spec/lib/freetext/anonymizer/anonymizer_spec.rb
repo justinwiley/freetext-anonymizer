@@ -1,47 +1,89 @@
 require 'spec_helper'
 
 describe Freetext do
+  let(:good) { ['Mars', 'Mercury', 'Lander']}
+  let(:bad) { ['Marsha', 'Mary', 'Maurice', 'Lance', 'Lary']}
+  let(:text) { "Marsha and Lance were the first aboard the Mars Lunar Lander."}
+  let(:opts) { {good: good, bad: bad} }
+  let(:ana) {Freetext::Analyzer.new(opts)}
 
-  describe Classifier do
-    let(:good) { ['Mars', 'Lander']}
-    let(:bad) { ['Marsha', 'Lance']}
-    let(:text) { "Marsha and Lance were the first aboard the Lunar Lander."}
-
-    let(:c) {Freetext::Classifier.new({good: good, bad: bad})}
+  describe Freetext::Analyzer do
 
     context '#initialize' do
       it 'should accept and expose a hash of known good and bad words' do
-        c.good.should == good
-        c.bad.should == bad
+        ana.good.should == good
+        ana.bad.should == bad
       end
 
-      it 'should complain if not given either'
+      it 'should initialize a bayesian classifer' do
+        ana.classifier.should be_kind_of(Classifier::Bayes)
+      end
     end
 
-    context 'classification' do
-      it '#train! should train the classifier on the basis of the good and bad wordlist'
+    it '#train! should train the classifier on the basis of the good and bad wordlist' do
+      ana.train!
+      ana.classifier.categories.should == ["Good", "Bad"]
+    end
 
-      it '#classify should classify a good word as good'
+    context '#analyze' do
+      it '#analyze should classify a good word as good and vice versa' do
+        bad.map{|word| ana.analyze(word) == 'Bad'}
+        good.map{|word| ana.analyze(word).should == 'Good'}
+      end
 
-      it '#classify should classify a bad word as bad'
+      it '#analyze should train the classifier unless its already trained' do
+        ana.classifier.instance_variable_get(:@category_counts).should be_empty
+        ana.analyze "test"
+        ana.classifier.instance_variable_get(:@category_counts).should == {:Good=>good.size, :Bad=>bad.size}
+      end
+
     end
   end
 
   describe Freetext::Anonymizer do
-    context 'initialization' do
-      it 'should initialize with a list of known good and bad words, create classifier'
+    let(:anon) { Freetext::Anonymizer.new(opts) }
 
-      it 'should alternatively accept a previouslly trained classifer'
+    context 'initialize' do
+      before do
+        ana.train!
+      end
+
+      it 'should accept a wordlist, initialize an analyzer with them' do
+        anon.analyzer.should be_kind_of(Freetext::Analyzer)
+        anon.analyzer.good.should == opts[:good]
+        anon.analyzer.bad.should == opts[:bad]
+      end
+
+      it 'should alternatively accept an existing analyzer' do
+        f = Freetext::Anonymizer.new(analyzer: ana)
+        f.analyzer.should == ana
+      end
+
+      it 'should de-marshal given analyzer if necessary' do
+        f = Freetext::Anonymizer.new(analyzer: Marshal.dump(ana))
+        f.analyzer.stats.should == ana.stats
+      end
+
+      it 'should complain if not given either' do
+        expect{Freetext::Anonymizer.new({})}.to raise_error(ArgumentError)
+      end
     end
 
     context '#anonymize' do
-      it 'should accept a string of text, remove known bad, return'
+      it 'should anonymize'
 
-      it 'should accept should not remove known good'
     end
 
     it '#dump should marshal and return a trained classifier for later use' do
+      dump = anon.dump
+      dump.should be_kind_of(String)
+      Marshal.load(dump).should be_kind_of(Freetext::Analyzer)
+    end
 
+    it '#load should load marshalled classifer' do
+      dump = anon.dump
+      anon.load dump
+      anon.analyzer.should be_kind_of(Freetext::Analyzer)
     end
   end
 end
